@@ -18,7 +18,7 @@ typedef enum scode {
  * Arguments for serve_forever
  */
 typedef struct listener_args {
-    int* server_fd;
+    int server_fd;
     int port;
 } listener_args;
 

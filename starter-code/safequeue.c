@@ -297,9 +297,8 @@ void print_queue(queue *q) {
     pthread_mutex_lock(&(q->lock));
     print_and_flush("print_queue: Obtained Lock\n");
 
-
+    print_and_flush("Length: %d", q->length);
     for (int i = 0; i < q->capacity; i++) {
-        print_and_flush("Element %d: HR Ptr: %p\n", i, q->heap[i].hr);
         if(q->heap[i].hr != NULL) {
             print_and_flush("\tPriority: %d\n", q->heap[i].priority);
             print_and_flush("\tMethod: %s\n", q->heap[i].hr->method);
@@ -307,7 +306,7 @@ void print_queue(queue *q) {
             print_and_flush("\tClient_fd: %d\n", q->heap[i].hr->client_fd);
             print_and_flush("\tDelay: %d\n", q->heap[i].hr->delay);
             print_and_flush("\tRequest Length: %d\n", q->heap[i].hr->request_length);
-            print_and_flush("\tRequest: %s\n", q->heap[i].hr->request);
+            print_and_flush("\tRequest: %.6s\n", q->heap[i].hr->request);
             print_and_flush("\n");   
         }  
     }

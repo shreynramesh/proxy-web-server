@@ -458,7 +458,7 @@ time.sleep(0.5)
 # tests = [Test1(), Test2(), Test5(), Test6(), Test7(), Test8(), Test10(),
 #          ]
 # tests = [Test9()]
-# tests = [Test3()]
+tests = [Test3()]
 
 ts = run_tests(tests)
 print(f'Total score: {ts}')

@@ -312,6 +312,7 @@ void* work_forever() {
 
         } else {
             // forward the fileserver response to the client
+            print_and_flush("Forwarding the fileserver response to the client\n");
             while (1) {
                 int bytes_read = recv(fileserver_fd, hr->request, RESPONSE_BUFSIZE - 1, 0);
                 if (bytes_read <= 0) // fileserver_fd has been closed, break
@@ -324,17 +325,16 @@ void* work_forever() {
         }
 
         // close the connection to the client
-        shutdown(hr->client_fd, SHUT_WR);
+        shutdown(hr->client_fd, SHUT_RDWR);
         close(hr->client_fd);
+        shutdown(fileserver_fd, SHUT_RDWR);
+        close(fileserver_fd);
         free(hr);
     }
-
-    shutdown(fileserver_fd, SHUT_RDWR);
-    close(fileserver_fd);
+    
     return NULL;
 }
 
-int server_fd;
 /*
  * opens a TCP stream socket on all interfaces with port number PORTNO. Saves
  * the fd number of the server socket in *socket_number. For each accepted
@@ -342,19 +342,12 @@ int server_fd;
  */
 void* serve_forever(void* arg) {
     listener_args* args = (listener_args*) arg;
-    int* server_fd = args->server_fd;
+    int server_fd = args->server_fd;
     int port = args->port;
-
-    // create a socket to listen
-    *server_fd = socket(PF_INET, SOCK_STREAM, 0);
-    if (*server_fd == -1) {
-        perror("Failed to create a new socket");
-        exit(errno);
-    }
 
     // manipulate options for the socket
     int socket_option = 1;
-    if (setsockopt(*server_fd, SOL_SOCKET, SO_REUSEADDR, &socket_option,
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &socket_option,
                    sizeof(socket_option)) == -1) {
         perror("Failed to set socket options");
         exit(errno);
@@ -370,14 +363,14 @@ void* serve_forever(void* arg) {
     proxy_address.sin_port = htons(proxy_port); // listening port
 
     // bind the socket to the address and port number specified in
-    if (bind(*server_fd, (struct sockaddr *)&proxy_address,
+    if (bind(server_fd, (struct sockaddr *)&proxy_address,
              sizeof(proxy_address)) == -1) {
         perror("Failed to bind on socket");
         exit(errno);
     }
 
     // starts waiting for the client to request a connection
-    if (listen(*server_fd, port) == -1) {
+    if (listen(server_fd, port) == -1) {
         perror("Failed to listen on socket");
         exit(errno);
     }
@@ -389,7 +382,8 @@ void* serve_forever(void* arg) {
     int client_fd;
 
     while (1) {
-        client_fd = accept(*server_fd,
+        print_and_flush("serve_forever: waiting for a client\n");
+        client_fd = accept(server_fd,
                            (struct sockaddr *)&client_address,
                            (socklen_t *)&client_address_length);
         if (client_fd < 0) {
@@ -416,7 +410,6 @@ void* serve_forever(void* arg) {
                 send_error_response(client_fd, QUEUE_FULL, http_get_response_message(QUEUE_FULL));
 
                 // close the connection to the client
-                shutdown(hr->client_fd, SHUT_WR);
                 close(hr->client_fd);
             }
             print_and_flush("DEBUG: Added to queue\n");
@@ -447,8 +440,8 @@ void* serve_forever(void* arg) {
         }
     }
 
-    shutdown(*server_fd, SHUT_RDWR);
-    close(*server_fd);
+    shutdown(server_fd, SHUT_RDWR);
+    close(server_fd);
 
     return NULL;
 }
@@ -481,15 +474,15 @@ void print_settings() {
     print_and_flush("\t  ----\t----\t\n");
 }
 
-void signal_callback_handler(int signum) {
-    print_and_flush("Caught signal %d: %s\n", signum, strsignal(signum));
-    for (int i = 0; i < num_listener; i++) {
-        if (close(server_fd) < 0) perror("Failed to close server_fd (ignoring)\n");
-    }
-    // free_queue(pq);
-    free(listener_ports);
-    exit(0);
-}
+// void signal_callback_handler(int signum) {
+//     print_and_flush("Caught signal %d: %s\n", signum, strsignal(signum));
+//     for (int i = 0; i < num_listener; i++) {
+//         if (close(server_fd) < 0) perror("Failed to close server_fd (ignoring)\n");
+//     }
+//     // free_queue(pq);
+//     free(listener_ports);
+//     exit(0);
+// }
 
 char *USAGE =
     "Usage: ./proxyserver [-l 1 8000] [-n 1] [-i 127.0.0.1 -p 3333] [-q 100]\n";
@@ -500,7 +493,7 @@ void exit_with_usage() {print_and_flush("DEBUG\n");
 }
 
 int main(int argc, char **argv) {
-    signal(SIGINT, signal_callback_handler);
+    // signal(SIGINT, signal_callback_handler);
 
     /* Default settings */
     default_settings();
@@ -541,6 +534,7 @@ int main(int argc, char **argv) {
     pthread_t *listeners_t = malloc(sizeof(pthread_t) * num_listener);
     pthread_t *workers_t = malloc(sizeof(pthread_t) * num_workers);
     listener_args* l_args = malloc(sizeof(listener_args) * num_listener);
+    int* listener_sockets = malloc(sizeof(int) * num_listener);
 
     if (listeners_t == NULL || workers_t == NULL || l_args == NULL) {
         // Handle memory allocation failure
@@ -551,7 +545,14 @@ int main(int argc, char **argv) {
     // Creating listener threads
     print_and_flush("Creating %d listeners threads...\n", num_listener);
     for(int j = 0; j < num_listener; j++) {
-        l_args[j].server_fd = &server_fd;
+        // create a socket to listen
+        listener_sockets[j]= socket(PF_INET, SOCK_STREAM, 0);
+        if (listener_sockets[j] == -1) {
+            perror("Failed to create a new socket");
+            exit(errno);
+        }
+
+        l_args[j].server_fd = listener_sockets[j];
         l_args[j].port = listener_ports[j];
         pthread_create(&listeners_t[j], NULL, serve_forever, &l_args[j]);
     }
