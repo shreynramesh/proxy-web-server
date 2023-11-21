@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "stdio.h": "c",
+        "safequeue.h": "c",
+        "socket.h": "c",
+        "proxyserver.h": "c",
+        "unistd.h": "c",
+        "types.h": "c"
+    }
+}
